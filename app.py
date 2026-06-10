@@ -49,7 +49,7 @@ st.set_page_config(
 )
 
 # Custom premium CSS (Glassmorphism & Gradients)
-st.markdown("""
+st.markdown('''
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
 
@@ -113,7 +113,7 @@ html, body, [class*="css"] {
     border-radius: 8px !important;
 }
 </style>
-""", unsafe_allow_html=True)
+''', unsafe_allow_html=True)
 
 st.markdown('<div class="title-container"><h1 class="title-text">Acrux Dynamics</h1><div class="subtitle-text">Internal HR Help Desk & Policy Assistant</div></div>', unsafe_allow_html=True)
 
@@ -194,7 +194,7 @@ elif retriever is None or llm is None:
 else:
     # Set up prompts
     RAG_PROMPT = ChatPromptTemplate.from_messages([
-        ("system", """You are an HR Assistant for Acrux Dynamics.
+        ('system', '''You are an HR Assistant for Acrux Dynamics.
 Answer the employee's question using ONLY the provided policy context. Do not assume or extrapolate.
 If the answer is not in the context, respond with: "I am sorry, but I do not have that information in the internal policy documents."
 
@@ -202,12 +202,12 @@ Note: The context refers to the company as 'Zyro Dynamics' and its products as '
 
 Context:
 {context}
-"""),
+'''),
         ("human", "{question}")
     ])
     
     OOS_PROMPT = ChatPromptTemplate.from_messages([
-        ("system", """You are a classification assistant for the Acrux Dynamics HR Help Desk.
+        ('system', '''You are a classification assistant for the Acrux Dynamics HR Help Desk.
 Your job is to classify if the employee's question is IN_SCOPE or OUT_OF_SCOPE.
 
 IN_SCOPE questions are related to employee HR policies and processes of Acrux Dynamics, such as:

@@ -12,6 +12,14 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
+# Map Streamlit Secrets to environment variables if running in Streamlit Cloud
+try:
+    for key, value in st.secrets.items():
+        if not os.getenv(key):
+            os.environ[key] = str(value)
+except Exception:
+    pass
+
 # App configuration
 possible_paths = []
 env_corpus = os.getenv("CORPUS_PATH")
@@ -32,7 +40,7 @@ if not CORPUS_PATH:
     CORPUS_PATH = "zyro-dynamics-hr-corpus"
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
-LLM_MODEL = os.getenv("LLM_MODEL", "gemini-3.5-flash")
+LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash") # Default to gemini-2.5-flash as gemini-3.5-flash is not a valid model name
 
 st.set_page_config(
     page_title="Acrux Dynamics HR Portal",
@@ -112,38 +120,76 @@ st.markdown('<div class="title-container"><h1 class="title-text">Acrux Dynamics<
 @st.cache_resource(show_spinner="Initializing RAG pipeline & indexing documents...")
 def init_rag_pipeline(corpus_path):
     if not os.path.exists(corpus_path):
-        return None, None
+        return None, None, f"Corpus path not found: {corpus_path}. Please check your environment configuration or set the correct CORPUS_PATH environment variable."
     
     # Load and process docs
-    loader = PyPDFDirectoryLoader(corpus_path)
-    documents = loader.load()
+    try:
+        loader = PyPDFDirectoryLoader(corpus_path)
+        documents = loader.load()
+        if not documents:
+            return None, None, f"No PDF documents found in corpus path: {corpus_path}."
+    except Exception as e:
+        return None, None, f"Error loading documents: {str(e)}"
     
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    chunks = splitter.split_documents(documents)
-    
-    embeddings = HuggingFaceEmbeddings(
-        model_name="BAAI/bge-small-en-v1.5",
-        model_kwargs={'device': 'cpu'},
-        encode_kwargs={'normalize_embeddings': True}
-    )
-    
-    vectorstore = FAISS.from_documents(chunks, embeddings)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+    try:
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        chunks = splitter.split_documents(documents)
+        
+        embeddings = HuggingFaceEmbeddings(
+            model_name="BAAI/bge-small-en-v1.5",
+            model_kwargs={'device': 'cpu'},
+            encode_kwargs={'normalize_embeddings': True}
+        )
+        
+        vectorstore = FAISS.from_documents(chunks, embeddings)
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+    except Exception as e:
+        return None, None, f"Error building vector index: {str(e)}"
     
     # Initialize LLM
-    if LLM_PROVIDER == "groq":
-        llm = ChatGroq(model=LLM_MODEL, temperature=0.1)
-    elif LLM_PROVIDER == "openai":
-        llm = ChatOpenAI(model=LLM_MODEL, temperature=0.1)
-    else:
-        llm = ChatGoogleGenerativeAI(model=LLM_MODEL, temperature=0.1)
+    try:
+        if LLM_PROVIDER == "groq":
+            llm = ChatGroq(model=LLM_MODEL, temperature=0.1)
+        elif LLM_PROVIDER == "openai":
+            llm = ChatOpenAI(model=LLM_MODEL, temperature=0.1)
+        else:
+            api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                return None, None, "API key for Gemini is missing. Please set GOOGLE_API_KEY or GEMINI_API_KEY in the Streamlit Secrets or environment variables."
+            
+            # Map gemini-3.5-flash or others to gemini-2.5-flash
+            model_name = LLM_MODEL
+            if "3.5" in model_name:
+                model_name = "gemini-2.5-flash"
+            
+            llm = ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key, temperature=0.1)
+    except Exception as e:
+        return None, None, f"Error initializing LLM: {str(e)}"
         
-    return retriever, llm
+    return retriever, llm, None
 
 # Initialize RAG Pipeline
-retriever, llm = init_rag_pipeline(CORPUS_PATH)
+retriever, llm, init_error = init_rag_pipeline(CORPUS_PATH)
 
-if retriever is None or llm is None:
+if init_error:
+    st.error(init_error)
+    if "API key" in init_error:
+        st.info("""
+        **How to configure API Keys on Streamlit Cloud:**
+        1. Go to your **Streamlit Cloud Dashboard**.
+        2. Click the three dots next to your deployed app and choose **Settings**.
+        3. Select **Secrets** on the left menu.
+        4. Enter your secrets in TOML format:
+           ```toml
+           GOOGLE_API_KEY = "your_actual_gemini_api_key"
+           # Optional:
+           LANGCHAIN_API_KEY = "your_langsmith_api_key"
+           LANGCHAIN_TRACING_V2 = "true"
+           LANGCHAIN_PROJECT = "zyro-rag-challenge"
+           ```
+        5. Click **Save** and the app will redeploy automatically.
+        """)
+elif retriever is None or llm is None:
     st.error(f"Corpus path not found: {CORPUS_PATH}. Please check your environment configuration or set the correct CORPUS_PATH environment variable.")
 else:
     # Set up prompts

@@ -227,7 +227,7 @@ OUT_OF_SCOPE questions include:
 - General knowledge, coding, or unrelated queries.
 
 Respond with exactly "IN_SCOPE" or "OUT_OF_SCOPE". Do not add any other words or punctuation.
-"""),
+'''),
         ("human", "Question: {question}. Classification:")
     ])
     
